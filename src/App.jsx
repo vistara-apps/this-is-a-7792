@@ -17,7 +17,7 @@ import { AuthProvider } from './context/AuthContext';
 // Components
 import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import { Dashboard } from './pages/Dashboard';
@@ -156,4 +156,3 @@ function App() {
 }
 
 export default App;
-
