@@ -1,332 +1,216 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAccount } from 'wagmi';
-import { ArrowLeft, Search, Check } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { useDatabaseContext } from '../context/DatabaseContext';
+import { useTokenMetadata } from '../hooks/useTokenMetadata';
+import { useToast } from '../context/ToastContext';
 import { TokenInput } from '../components/TokenInput';
-import { Callout } from '../components/Callout';
 
+/**
+ * Create Project page component
+ * Form for creating a new token project
+ */
 export function CreateProject() {
   const navigate = useNavigate();
-  const { address, isConnected } = useAccount();
-  const [step, setStep] = useState(1);
-  const [projectData, setProjectData] = useState({
+  const { createProject } = useDatabaseContext();
+  const { validateToken, isLoading: isValidating } = useTokenMetadata();
+  const toast = useToast();
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
     tokenAddress: '',
     tokenName: '',
     tokenSymbol: '',
-    chain: 'base',
-    features: []
+    chain: 'base'
   });
-  const [isValidating, setIsValidating] = useState(false);
-  const [tokenValid, setTokenValid] = useState(false);
+  const [validationState, setValidationState] = useState({
+    isValid: false,
+    metadata: null
+  });
 
-  const validateToken = async () => {
-    if (!projectData.tokenAddress) return;
-    
-    setIsValidating(true);
-    // Simulate API call to validate token
-    setTimeout(() => {
-      setProjectData(prev => ({
-        ...prev,
-        tokenName: 'Example Token',
-        tokenSymbol: 'EXAMPLE'
-      }));
-      setTokenValid(true);
-      setIsValidating(false);
-    }, 1500);
-  };
+  // Available chains
+  const chains = [
+    { id: 'base', name: 'Base' },
+    { id: 'ethereum', name: 'Ethereum' },
+    { id: 'polygon', name: 'Polygon' },
+    { id: 'optimism', name: 'Optimism' },
+    { id: 'arbitrum', name: 'Arbitrum' }
+  ];
 
-  const handleFeatureToggle = (featureType) => {
-    setProjectData(prev => ({
+  // Handle form input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
       ...prev,
-      features: prev.features.includes(featureType)
-        ? prev.features.filter(f => f !== featureType)
-        : [...prev.features, featureType]
+      [name]: value
     }));
   };
 
-  const createProject = () => {
-    // Simulate project creation
-    const newProject = {
-      projectId: Date.now(),
-      creatorId: address,
-      ...projectData,
-      utilityFeatures: projectData.features.map(type => ({
-        featureId: Date.now() + Math.random(),
-        featureType: type,
-        featureName: `${type.replace('-', ' ')} Feature`,
-        accessCriteria: { minTokenAmount: 100 }
-      }))
-    };
-    
-    // In a real app, this would save to backend
-    console.log('Created project:', newProject);
-    navigate('/');
+  // Handle token address change
+  const handleTokenAddressChange = (value) => {
+    setFormData(prev => ({
+      ...prev,
+      tokenAddress: value
+    }));
   };
 
-  const features = [
-    {
-      id: 'access-control',
-      name: 'Exclusive Access Control',
-      description: 'Gate premium features behind token ownership',
-      recommended: true
-    },
-    {
-      id: 'governance',
-      name: 'Community Governance',
-      description: 'Enable token holder voting on key decisions',
-      recommended: true
-    },
-    {
-      id: 'staking',
-      name: 'Staking Rewards',
-      description: 'Incentivize long-term holding with staking pools',
-      recommended: false
+  // Handle token validation
+  const handleTokenValidation = (isValid, metadata) => {
+    setValidationState({
+      isValid,
+      metadata
+    });
+    
+    if (isValid && metadata) {
+      setFormData(prev => ({
+        ...prev,
+        tokenName: metadata.name,
+        tokenSymbol: metadata.symbol
+      }));
     }
-  ];
+  };
 
-  if (!isConnected) {
-    return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-semibold text-text-primary mb-2">
-          Connect Your Wallet
-        </h2>
-        <p className="text-text-secondary">
-          You need to connect your wallet to create a project
-        </p>
-      </div>
-    );
-  }
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validationState.isValid) {
+      toast.error('Please enter a valid token address');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      const newProject = await createProject({
+        tokenAddress: formData.tokenAddress,
+        tokenName: formData.tokenName,
+        tokenSymbol: formData.tokenSymbol,
+        chain: formData.chain
+      });
+      
+      toast.success('Project created successfully');
+      navigate(`/projects/${newProject.projectId}`);
+    } catch (error) {
+      toast.error('Failed to create project');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <button
-          onClick={() => navigate('/')}
+        <Link
+          to="/projects"
           className="flex items-center space-x-2 text-text-secondary hover:text-text-primary mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Dashboard</span>
-        </button>
+          <span>Back to Projects</span>
+        </Link>
         
         <h1 className="text-3xl font-bold text-text-primary mb-2">
           Create New Project
         </h1>
         <p className="text-text-secondary">
-          Set up token utility features for your community
+          Add a new token project to manage utility features, governance, and staking
         </p>
       </div>
 
-      {/* Progress Steps */}
-      <div className="flex items-center space-x-4 mb-8">
-        {[1, 2, 3].map((stepNum) => (
-          <div key={stepNum} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
-              step >= stepNum
-                ? 'bg-primary text-white'
-                : 'bg-gray-200 text-gray-600'
-            }`}>
-              {step > stepNum ? <Check className="w-4 h-4" /> : stepNum}
-            </div>
-            {stepNum < 3 && (
-              <div className={`w-12 h-0.5 ${
-                step > stepNum ? 'bg-primary' : 'bg-gray-200'
-              }`} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {step === 1 && (
-        <div className="card space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold text-text-primary mb-4">
-              Token Information
-            </h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Token Contract Address
-                </label>
-                <TokenInput
-                  variant="tokenAddress"
-                  value={projectData.tokenAddress}
-                  onChange={(value) => setProjectData(prev => ({ ...prev, tokenAddress: value }))}
-                  placeholder="0x..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Network
-                </label>
-                <select
-                  value={projectData.chain}
-                  onChange={(e) => setProjectData(prev => ({ ...prev, chain: e.target.value }))}
-                  className="input-field"
-                >
-                  <option value="base">Base</option>
-                  <option value="ethereum">Ethereum</option>
-                  <option value="polygon">Polygon</option>
-                  <option value="arbitrum">Arbitrum</option>
-                </select>
-              </div>
-
-              {projectData.tokenAddress && !tokenValid && (
-                <button
-                  onClick={validateToken}
-                  disabled={isValidating}
-                  className="btn-primary flex items-center space-x-2"
-                >
-                  <Search className="w-4 h-4" />
-                  <span>{isValidating ? 'Validating...' : 'Validate Token'}</span>
-                </button>
-              )}
-
-              {tokenValid && (
-                <Callout variant="success">
-                  <strong>Token validated:</strong> {projectData.tokenName} (${projectData.tokenSymbol})
-                </Callout>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              onClick={() => setStep(2)}
-              disabled={!tokenValid}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="card space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold text-text-primary mb-4">
-              Select Features
-            </h2>
-            <p className="text-text-secondary mb-6">
-              Choose which utility features to enable for your token holders
-            </p>
-
-            <div className="space-y-4">
-              {features.map((feature) => (
-                <div
-                  key={feature.id}
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                    projectData.features.includes(feature.id)
-                      ? 'border-primary bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => handleFeatureToggle(feature.id)}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
-                      projectData.features.includes(feature.id)
-                        ? 'border-primary bg-primary'
-                        : 'border-gray-300'
-                    }`}>
-                      {projectData.features.includes(feature.id) && (
-                        <Check className="w-3 h-3 text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-medium text-text-primary">
-                          {feature.name}
-                        </h3>
-                        {feature.recommended && (
-                          <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                            Recommended
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-text-secondary text-sm mt-1">
-                        {feature.description}
-                      </p>
-                    </div>
+      <div className="card">
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+              <div className="flex">
+                <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-blue-800">
+                    Important Information
+                  </h3>
+                  <div className="mt-2 text-sm text-blue-700">
+                    <p>
+                      You'll need to provide the contract address of your ERC-20 token.
+                      Make sure you're using the correct address on the selected chain.
+                    </p>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
 
-          <div className="flex justify-between">
-            <button
-              onClick={() => setStep(1)}
-              className="btn-secondary"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              disabled={projectData.features.length === 0}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="card space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold text-text-primary mb-4">
-              Review & Create
-            </h2>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1">
+                Blockchain Network
+              </label>
+              <select
+                name="chain"
+                value={formData.chain}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                required
+              >
+                {chains.map(chain => (
+                  <option key={chain.id} value={chain.id}>
+                    {chain.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-medium text-text-primary mb-2">Token Details</h3>
-                <div className="space-y-1 text-sm">
-                  <p><span className="text-text-secondary">Name:</span> {projectData.tokenName}</p>
-                  <p><span className="text-text-secondary">Symbol:</span> ${projectData.tokenSymbol}</p>
-                  <p><span className="text-text-secondary">Network:</span> {projectData.chain}</p>
-                  <p><span className="text-text-secondary">Address:</span> {projectData.tokenAddress}</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-medium text-text-primary mb-2">Selected Features</h3>
-                <div className="space-y-1">
-                  {projectData.features.map((featureId) => {
-                    const feature = features.find(f => f.id === featureId);
-                    return (
-                      <p key={featureId} className="text-sm text-text-secondary">
-                        • {feature?.name}
-                      </p>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Callout variant="info">
-                You can configure feature settings and access criteria after creating the project.
-              </Callout>
+            <TokenInput
+              value={formData.tokenAddress}
+              onChange={handleTokenAddressChange}
+              onValidation={handleTokenValidation}
+              chain={formData.chain}
+              label="Token Contract Address"
+              placeholder="0x..."
+              required
+            />
+            
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1">
+                Token Name
+              </label>
+              <input
+                type="text"
+                name="tokenName"
+                value={formData.tokenName}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                placeholder="My Token"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1">
+                Token Symbol
+              </label>
+              <input
+                type="text"
+                name="tokenSymbol"
+                value={formData.tokenSymbol}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                placeholder="TKN"
+                required
+              />
+            </div>
+            
+            <div className="pt-4">
+              <button
+                type="submit"
+                className="btn-primary w-full"
+                disabled={isSubmitting || isValidating || !validationState.isValid}
+              >
+                {isSubmitting ? 'Creating Project...' : 'Create Project'}
+              </button>
             </div>
           </div>
-
-          <div className="flex justify-between">
-            <button
-              onClick={() => setStep(2)}
-              className="btn-secondary"
-            >
-              Back
-            </button>
-            <button
-              onClick={createProject}
-              className="btn-primary"
-            >
-              Create Project
-            </button>
-          </div>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }
+
+export default CreateProject;
+

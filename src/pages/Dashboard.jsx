@@ -1,190 +1,261 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { useAccount } from 'wagmi';
-import { Plus, Coins, Users, TrendingUp, Lock, Vote, Layers } from 'lucide-react';
-import { FeatureCard } from '../components/FeatureCard';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Coins, ArrowRight, TrendingUp, Users, Shield } from 'lucide-react';
+import { useDatabaseContext } from '../context/DatabaseContext';
+import { useAuth } from '../hooks/useAuth';
 import { ProjectCard } from '../components/ProjectCard';
-import { usePaymentContext } from '../hooks/usePaymentContext';
-import { mockProjects } from '../data/mockData';
+import { LoadingIndicator, SkeletonLoader } from '../components/LoadingIndicator';
 
+/**
+ * Dashboard page component
+ * Main landing page showing projects and stats
+ */
 export function Dashboard() {
-  const { address, isConnected } = useAccount();
-  const [projects, setProjects] = useState([]);
-  const [paidFeatures, setPaidFeatures] = useState(new Set());
-  const { createSession } = usePaymentContext();
+  const navigate = useNavigate();
+  const { projects, isLoadingProjects, refreshProjects } = useDatabaseContext();
+  const { userProfile, isAuthenticated } = useAuth();
+  const [stats, setStats] = useState({
+    totalProjects: 0,
+    totalFeatures: 0,
+    totalProposals: 0,
+    totalStakingPools: 0
+  });
 
+  // Calculate stats when projects change
   useEffect(() => {
-    // Load user's projects (mock data for now)
-    if (isConnected && address) {
-      const userProjects = mockProjects.filter(p => 
-        p.creatorId.toLowerCase() === address.toLowerCase()
-      );
-      setProjects(userProjects);
+    if (projects && projects.length > 0) {
+      const totalFeatures = projects.reduce((acc, project) => 
+        acc + (project.utility_features?.length || 0), 0);
+      
+      const totalProposals = projects.reduce((acc, project) => 
+        acc + (project.governance_proposals?.length || 0), 0);
+      
+      const totalStakingPools = projects.reduce((acc, project) => 
+        acc + (project.staking_pools?.length || 0), 0);
+      
+      setStats({
+        totalProjects: projects.length,
+        totalFeatures,
+        totalProposals,
+        totalStakingPools
+      });
     }
-  }, [isConnected, address]);
+  }, [projects]);
 
-  const handleUpgrade = async (feature) => {
-    try {
-      await createSession();
-      setPaidFeatures(prev => new Set([...prev, feature]));
-    } catch (error) {
-      console.error('Payment failed:', error);
+  // Refresh projects on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshProjects();
     }
+  }, [isAuthenticated]);
+
+  // Handle create project button click
+  const handleCreateProject = () => {
+    navigate('/projects/create');
   };
-
-  const stats = [
-    {
-      name: 'Total Projects',
-      value: projects.length,
-      icon: Layers,
-      color: 'text-blue-600'
-    },
-    {
-      name: 'Active Features',
-      value: projects.reduce((acc, p) => acc + p.utilityFeatures.length, 0),
-      icon: Lock,
-      color: 'text-green-600'
-    },
-    {
-      name: 'Total Holders',
-      value: projects.reduce((acc, p) => acc + (p.holderCount || 0), 0),
-      icon: Users,
-      color: 'text-purple-600'
-    },
-    {
-      name: 'Governance Proposals',
-      value: projects.reduce((acc, p) => acc + (p.proposalCount || 0), 0),
-      icon: Vote,
-      color: 'text-orange-600'
-    }
-  ];
-
-  if (!isConnected) {
-    return (
-      <div className="text-center py-16">
-        <Coins className="w-16 h-16 text-text-secondary mx-auto mb-4" />
-        <h2 className="text-2xl font-semibold text-text-primary mb-2">
-          Connect Your Wallet
-        </h2>
-        <p className="text-text-secondary mb-6">
-          Connect your wallet to start creating token utility projects
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8">
-      {/* Hero Section */}
-      <div className="text-center py-12">
-        <h1 className="text-4xl font-bold text-text-primary mb-4">
-          Unlock Token Utility
-        </h1>
-        <p className="text-xl text-text-secondary mb-8 max-w-2xl mx-auto">
-          Create exclusive access, governance, and staking features for your token holders
-        </p>
-        <Link
-          to="/create"
-          className="btn-primary inline-flex items-center space-x-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Create New Project</span>
-        </Link>
+      {/* Welcome Section */}
+      <div className="card bg-gradient-to-r from-primary/10 to-primary/5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-text-primary mb-2">
+              Welcome{userProfile?.name ? `, ${userProfile.name}` : ''}!
+            </h1>
+            <p className="text-text-secondary mb-4 md:mb-0">
+              Manage your token utility and drive value for your community
+            </p>
+          </div>
+          
+          <button
+            onClick={handleCreateProject}
+            className="btn-primary flex items-center"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Create Project
+          </button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.name} className="card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-text-secondary text-sm font-medium">
-                    {stat.name}
-                  </p>
-                  <p className="text-2xl font-bold text-text-primary">
-                    {stat.value}
-                  </p>
-                </div>
-                <Icon className={`w-8 h-8 ${stat.color}`} />
-              </div>
+      {/* Stats Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="card">
+          <div className="flex items-start">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+              <Coins className="w-5 h-5 text-primary" />
             </div>
-          );
-        })}
-      </div>
-
-      {/* Core Features */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-text-primary">
-            Core Features
-          </h2>
+            <div>
+              <div className="text-sm text-text-secondary">Total Projects</div>
+              {isLoadingProjects ? (
+                <SkeletonLoader type="text" className="w-16 h-7 mt-1" />
+              ) : (
+                <div className="text-2xl font-semibold text-text-primary">
+                  {stats.totalProjects}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <FeatureCard
-            variant="accessControl"
-            title="Exclusive Access Control"
-            description="Gate premium features behind token ownership"
-            icon={Lock}
-            isPaid={paidFeatures.has('access')}
-            onUpgrade={() => handleUpgrade('access')}
-          />
-          <FeatureCard
-            variant="governance"
-            title="Community Governance"
-            description="Enable token holder voting on key decisions"
-            icon={Vote}
-            isPaid={paidFeatures.has('governance')}
-            onUpgrade={() => handleUpgrade('governance')}
-          />
-          <FeatureCard
-            variant="staking"
-            title="Staking Rewards"
-            description="Incentivize long-term holding with staking pools"
-            icon={TrendingUp}
-            isPaid={paidFeatures.has('staking')}
-            onUpgrade={() => handleUpgrade('staking')}
-          />
+        <div className="card">
+          <div className="flex items-start">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+              <Shield className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm text-text-secondary">Total Features</div>
+              {isLoadingProjects ? (
+                <SkeletonLoader type="text" className="w-16 h-7 mt-1" />
+              ) : (
+                <div className="text-2xl font-semibold text-text-primary">
+                  {stats.totalFeatures}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="card">
+          <div className="flex items-start">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+              <Users className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm text-text-secondary">Total Proposals</div>
+              {isLoadingProjects ? (
+                <SkeletonLoader type="text" className="w-16 h-7 mt-1" />
+              ) : (
+                <div className="text-2xl font-semibold text-text-primary">
+                  {stats.totalProposals}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="card">
+          <div className="flex items-start">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+              <TrendingUp className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm text-text-secondary">Staking Pools</div>
+              {isLoadingProjects ? (
+                <SkeletonLoader type="text" className="w-16 h-7 mt-1" />
+              ) : (
+                <div className="text-2xl font-semibold text-text-primary">
+                  {stats.totalStakingPools}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* User Projects */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-text-primary">
-            Your Projects
+      {/* Recent Projects Section */}
+      <div>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-text-primary">
+            Recent Projects
           </h2>
-          {projects.length > 0 && (
-            <Link to="/create" className="btn-secondary">
-              <Plus className="w-4 h-4 mr-2" />
-              New Project
-            </Link>
-          )}
+          
+          <Link 
+            to="/projects" 
+            className="text-primary flex items-center text-sm font-medium hover:underline"
+          >
+            View All
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Link>
         </div>
-
-        {projects.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
-            <Layers className="w-12 h-12 text-text-secondary mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-text-primary mb-2">
-              No projects yet
-            </h3>
-            <p className="text-text-secondary mb-4">
-              Create your first token utility project to get started
-            </p>
-            <Link to="/create" className="btn-primary">
-              Create Project
-            </Link>
-          </div>
-        ) : (
+        
+        {isLoadingProjects ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
+            {[1, 2, 3].map(i => (
+              <SkeletonLoader key={i} type="card" className="h-64" />
+            ))}
+          </div>
+        ) : projects.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.slice(0, 3).map(project => (
               <ProjectCard key={project.projectId} project={project} />
             ))}
           </div>
+        ) : (
+          <div className="card text-center py-12">
+            <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+              <Coins className="w-8 h-8 text-text-secondary" />
+            </div>
+            <h3 className="text-xl font-medium text-text-primary mb-2">
+              No Projects Yet
+            </h3>
+            <p className="text-text-secondary mb-6 max-w-md mx-auto">
+              Create your first token project to start adding utility features, governance, and staking.
+            </p>
+            <button
+              onClick={handleCreateProject}
+              className="btn-primary mx-auto"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Create Project
+            </button>
+          </div>
         )}
+      </div>
+
+      {/* Quick Links Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card">
+          <h3 className="text-lg font-medium text-text-primary mb-2">
+            Exclusive Access
+          </h3>
+          <p className="text-text-secondary mb-4">
+            Create token-gated features to provide exclusive access to your community.
+          </p>
+          <Link 
+            to="/docs/access-control" 
+            className="text-primary flex items-center text-sm font-medium hover:underline"
+          >
+            Learn More
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Link>
+        </div>
+        
+        <div className="card">
+          <h3 className="text-lg font-medium text-text-primary mb-2">
+            Community Governance
+          </h3>
+          <p className="text-text-secondary mb-4">
+            Let your token holders vote on proposals and participate in decision-making.
+          </p>
+          <Link 
+            to="/docs/governance" 
+            className="text-primary flex items-center text-sm font-medium hover:underline"
+          >
+            Learn More
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Link>
+        </div>
+        
+        <div className="card">
+          <h3 className="text-lg font-medium text-text-primary mb-2">
+            Token Staking
+          </h3>
+          <p className="text-text-secondary mb-4">
+            Incentivize long-term holding with staking rewards and benefits.
+          </p>
+          <Link 
+            to="/docs/staking" 
+            className="text-primary flex items-center text-sm font-medium hover:underline"
+          >
+            Learn More
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Link>
+        </div>
       </div>
     </div>
   );
 }
+
+export default Dashboard;
+

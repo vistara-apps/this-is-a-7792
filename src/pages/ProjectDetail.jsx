@@ -1,197 +1,272 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAccount } from 'wagmi';
-import { ArrowLeft, Settings, Users, TrendingUp, Plus } from 'lucide-react';
-import { StakingForm } from '../components/StakingForm';
-import { ProposalForm } from '../components/ProposalForm';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  Edit, 
+  Trash2, 
+  ExternalLink, 
+  Shield, 
+  Vote, 
+  Coins,
+  AlertTriangle
+} from 'lucide-react';
+import { useDatabaseContext } from '../context/DatabaseContext';
+import { useBlockchain } from '../hooks/useBlockchain';
+import { useToast } from '../context/ToastContext';
+import { LoadingIndicator } from '../components/LoadingIndicator';
 import { AccessControlPanel } from '../components/AccessControlPanel';
-import { mockProjects } from '../data/mockData';
+import { GovernancePanel } from '../components/GovernancePanel';
+import { StakingPanel } from '../components/StakingPanel';
 
+/**
+ * Project Detail page component
+ * Shows detailed information about a token project and its features
+ */
 export function ProjectDetail() {
-  const { id } = useParams();
+  const { projectId } = useParams();
   const navigate = useNavigate();
-  const { address } = useAccount();
+  const { getProject, deleteProject, refreshProjects } = useDatabaseContext();
+  const { shortenAddress } = useBlockchain();
+  const toast = useToast();
+  
   const [project, setProject] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('access');
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  // Load project on mount
   useEffect(() => {
-    const foundProject = mockProjects.find(p => p.projectId === parseInt(id));
-    setProject(foundProject);
-  }, [id]);
+    loadProject();
+  }, [projectId]);
+
+  // Load project data
+  const loadProject = async () => {
+    setIsLoading(true);
+    try {
+      const projectData = await getProject(projectId);
+      setProject(projectData);
+    } catch (error) {
+      toast.error('Failed to load project');
+      navigate('/projects');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle project deletion
+  const handleDeleteProject = async () => {
+    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      await deleteProject(projectId);
+      toast.success('Project deleted successfully');
+      await refreshProjects();
+      navigate('/projects');
+    } catch (error) {
+      toast.error('Failed to delete project');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  if (isLoading) {
+    return <LoadingIndicator text="Loading project..." />;
+  }
 
   if (!project) {
     return (
-      <div className="text-center py-16">
+      <div className="text-center py-12">
+        <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
         <h2 className="text-2xl font-semibold text-text-primary mb-2">
           Project Not Found
         </h2>
-        <button onClick={() => navigate('/')} className="btn-primary">
-          Back to Dashboard
-        </button>
+        <p className="text-text-secondary mb-6">
+          The project you're looking for doesn't exist or you don't have access to it.
+        </p>
+        <Link to="/projects" className="btn-primary">
+          Back to Projects
+        </Link>
       </div>
     );
   }
 
-  const tabs = [
-    { id: 'overview', name: 'Overview', icon: TrendingUp },
-    { id: 'access', name: 'Access Control', icon: Settings },
-    { id: 'governance', name: 'Governance', icon: Users },
-    { id: 'staking', name: 'Staking', icon: Plus }
-  ];
-
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center space-x-2 text-text-secondary hover:text-text-primary"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back</span>
-          </button>
-          
+      <div className="mb-8">
+        <button
+          onClick={() => navigate('/projects')}
+          className="flex items-center space-x-2 text-text-secondary hover:text-text-primary mb-4"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Projects</span>
+        </button>
+        
+        <div className="flex flex-col md:flex-row md:items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-text-primary">
-              {project.tokenName}
+            <h1 className="text-3xl font-bold text-text-primary mb-1">
+              {project.tokenName} ({project.tokenSymbol})
             </h1>
-            <p className="text-text-secondary">
-              ${project.tokenSymbol} • {project.chain}
-            </p>
+            
+            <div className="flex items-center text-text-secondary">
+              <span>{shortenAddress(project.tokenAddress)}</span>
+              <a 
+                href={`https://basescan.org/token/${project.tokenAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-primary hover:underline flex items-center"
+              >
+                View on Explorer
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </a>
+            </div>
           </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-sm text-text-secondary">Token Address</p>
-          <p className="font-mono text-sm text-text-primary">
-            {project.tokenAddress}
-          </p>
+          
+          <div className="flex items-center space-x-3 mt-4 md:mt-0">
+            <Link
+              to={`/projects/${projectId}/edit`}
+              className="btn-secondary flex items-center"
+            >
+              <Edit className="w-4 h-4 mr-1" />
+              Edit
+            </Link>
+            
+            <button
+              onClick={handleDeleteProject}
+              className="btn-secondary text-red-600 hover:bg-red-50 flex items-center"
+              disabled={isDeleting}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card">
-          <div className="text-2xl font-bold text-text-primary">
-            {project.holderCount || 0}
+      {/* Project Info */}
+      <div className="card mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-1">
+              Chain
+            </h3>
+            <p className="text-text-primary font-medium">
+              {project.chain}
+            </p>
           </div>
-          <div className="text-text-secondary text-sm">Token Holders</div>
-        </div>
-        <div className="card">
-          <div className="text-2xl font-bold text-text-primary">
-            {project.utilityFeatures.length}
+          
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-1">
+              Created
+            </h3>
+            <p className="text-text-primary font-medium">
+              {formatDate(project.createdAt)}
+            </p>
           </div>
-          <div className="text-text-secondary text-sm">Active Features</div>
-        </div>
-        <div className="card">
-          <div className="text-2xl font-bold text-text-primary">
-            {project.proposalCount || 0}
+          
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-1">
+              Status
+            </h3>
+            <div className="flex items-center">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+              <span className="text-text-primary font-medium">Active</span>
+            </div>
           </div>
-          <div className="text-text-secondary text-sm">Proposals</div>
-        </div>
-        <div className="card">
-          <div className="text-2xl font-bold text-text-primary">
-            {project.stakingPools?.length || 0}
-          </div>
-          <div className="text-text-secondary text-sm">Staking Pools</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 mb-6">
         <nav className="flex space-x-8">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.name}</span>
-              </button>
-            );
-          })}
+          <button
+            onClick={() => handleTabChange('access')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm flex items-center
+              ${activeTab === 'access' 
+                ? 'border-primary text-primary' 
+                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
+              }
+            `}
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Access Control
+          </button>
+          
+          <button
+            onClick={() => handleTabChange('governance')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm flex items-center
+              ${activeTab === 'governance' 
+                ? 'border-primary text-primary' 
+                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
+              }
+            `}
+          >
+            <Vote className="w-4 h-4 mr-2" />
+            Governance
+          </button>
+          
+          <button
+            onClick={() => handleTabChange('staking')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm flex items-center
+              ${activeTab === 'staking' 
+                ? 'border-primary text-primary' 
+                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
+              }
+            `}
+          >
+            <Coins className="w-4 h-4 mr-2" />
+            Staking
+          </button>
         </nav>
       </div>
 
       {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="card">
-                <h3 className="text-lg font-semibold text-text-primary mb-4">
-                  Utility Features
-                </h3>
-                <div className="space-y-3">
-                  {project.utilityFeatures.map((feature) => (
-                    <div key={feature.featureId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-text-primary">
-                          {feature.featureName}
-                        </p>
-                        <p className="text-sm text-text-secondary">
-                          Requires {feature.accessCriteria.minTokenAmount} tokens
-                        </p>
-                      </div>
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                        Active
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="card">
-                <h3 className="text-lg font-semibold text-text-primary mb-4">
-                  Recent Activity
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-text-primary">
-                        Feature Access Granted
-                      </p>
-                      <p className="text-sm text-text-secondary">
-                        2 hours ago
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-text-primary">
-                        New Governance Proposal
-                      </p>
-                      <p className="text-sm text-text-secondary">
-                        1 day ago
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
+      <div>
         {activeTab === 'access' && (
-          <AccessControlPanel project={project} />
+          <AccessControlPanel 
+            project={project} 
+            onUpdate={loadProject} 
+          />
         )}
-
+        
         {activeTab === 'governance' && (
-          <ProposalForm variant="create" project={project} />
+          <GovernancePanel 
+            project={project} 
+            onUpdate={loadProject} 
+          />
         )}
-
+        
         {activeTab === 'staking' && (
-          <StakingForm variant="stake" project={project} />
+          <StakingPanel 
+            project={project} 
+            onUpdate={loadProject} 
+          />
         )}
       </div>
     </div>
   );
 }
+
+export default ProjectDetail;
+
